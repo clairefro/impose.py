@@ -1,0 +1,15 @@
+{
+  "name": "katte-p",
+  "version": "1.0.0",
+  "description": "Sextodecimo PDF imposition for cut-and-stack bookbinding",
+  "main": "impose.js",
+  "bin": {
+    "impose": "./impose.js"
+  },
+  "scripts": {
+    "impose": "node impose.js"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
