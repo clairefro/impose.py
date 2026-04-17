@@ -1,31 +1,27 @@
 #!/usr/bin/env python3
 """
-16-up folio imposition for cut-and-stack bookbinding using pikepdf.
+Sextodecimo (16mo) imposition for cut-and-stack bookbinding using pikepdf.
 
-Arranges 16 manuscript pages per physical sheet (4 folios in a 2×2 grid).
-Output has two PDF pages per sheet: Side A (front) and Side B (back),
-laid out for duplex printing with long-edge flip.
+Each sheet has a 4×4 grid of pages per side (16 cells obverse, 16 reverse).
+8 folios per side, each folio = 1 row × 2 cells.
 
-After printing duplex, cut each sheet into 4 quarters and stack
+The --folios flag controls how many folios per signature (2, 4, or 8).
+  -f 2 →  8 pages/sig, 4 sigs/sheet
+  -f 4 → 16 pages/sig, 2 sigs/sheet  [default]
+  -f 8 → 32 pages/sig, 1 sig/sheet
+
+Print duplex (long-edge flip), cut into strips/quarters, and stack
 to form signatures.
 """
 
 import argparse
-import math
 import sys
 from decimal import Decimal
 
 import pikepdf
 from pikepdf import Name, Array, Dictionary, Stream, Pdf
 
-# Sensible folio-grid layouts (folio_cols × folio_rows).
-# Each folio slot is 2 pages wide × 1 page tall.
-FOLIO_GRIDS = {
-    1: (1, 1),   #  4 pages/sheet  – quarto
-    2: (2, 1),   #  8 pages/sheet  – octavo
-    4: (2, 2),   # 16 pages/sheet  – sextodecimo
-    8: (4, 2),   # 32 pages/sheet  – trigesimo-secundo
-}
+VALID_FOLIOS = {2, 4, 8}
 
 
 # ---------------------------------------------------------------------------
@@ -34,18 +30,18 @@ FOLIO_GRIDS = {
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="N-up folio imposition for cut-and-stack bookbinding."
+        description="Sextodecimo (4×4) imposition for cut-and-stack bookbinding."
     )
     p.add_argument("input_file", help="Input manuscript PDF (one page = one book page)")
     p.add_argument("output_file", help="Output imposed PDF")
     p.add_argument(
         "-f", "--folios", type=int, default=4,
-        help="Folios per signature (default: 4). 1 folio = 4 book pages. "
-             "e.g. 1=quarto, 2=octavo, 4=sextodecimo, 8=32mo"
+        help="Folios per signature (default: 4). Allowed: 2, 4, 8. "
+             "1 folio = 4 book pages."
     )
     args = p.parse_args()
-    if args.folios < 1:
-        p.error("folios must be ≥ 1")
+    if args.folios not in VALID_FOLIOS:
+        p.error(f"folios must be one of {sorted(VALID_FOLIOS)}")
     return args
 
 
@@ -138,15 +134,10 @@ def make_sheet(out_pdf, sheet_w, sheet_h, placements, crop_bytes):
 
 def main():
     args = parse_args()
-    num_folios = args.folios
-    pages_per_sheet = num_folios * 4
-
-    # Folio grid dimensions
-    if num_folios in FOLIO_GRIDS:
-        fcols, frows = FOLIO_GRIDS[num_folios]
-    else:
-        fcols = math.ceil(math.sqrt(num_folios))
-        frows = math.ceil(num_folios / fcols)
+    F = args.folios                    # folios per signature
+    P = 4 * F                          # pages per signature
+    sigs_per_sheet = 8 // F            # signatures per sheet
+    pages_per_sheet = 32               # always 4×4×2 sides
 
     src = Pdf.open(args.input_file)
     total = len(src.pages)
@@ -157,7 +148,7 @@ def main():
     pw = float(mb[2]) - x0   # page width
     ph = float(mb[3]) - y0   # page height
 
-    # Pad to a multiple of pages_per_sheet with blank pages
+    # Pad to a multiple of 32 with blank pages
     remainder = total % pages_per_sheet
     if remainder:
         pad_count = pages_per_sheet - remainder
@@ -170,17 +161,17 @@ def main():
         total += pad_count
         print(f"Padded {pad_count} blank page(s) → {total} total")
 
-    # Sheet geometry: each folio slot = 2 pages wide × 1 page tall
-    sheet_w = fcols * 2 * pw
-    sheet_h = frows * ph
+    # Sheet geometry: 4×4 grid of pages per side
+    sheet_w = 4 * pw
+    sheet_h = 4 * ph
 
-    # Cut lines
-    v_cuts = [c * 2 * pw for c in range(1, fcols)]
-    h_cuts = [r * ph for r in range(1, frows)]
+    # Cut lines between columns and rows
+    v_cuts = [c * pw for c in range(1, 4)]
+    h_cuts = [r * ph for r in range(1, 4)]
 
     num_sheets = total // pages_per_sheet
 
-    print(f"Folios/sig : {num_folios} ({pages_per_sheet} pages/sheet, {fcols}×{frows} grid)")
+    print(f"Folios/sig : {F} ({P} pages/sig, {sigs_per_sheet} sig(s)/sheet)")
     print(f"Pages      : {total} ({num_sheets} sheet(s))")
     print(f"Page size  : {pw:.1f} × {ph:.1f} pt  ({pw/72:.2f}″ × {ph/72:.2f}″)")
     print(f"Sheet size : {sheet_w:.1f} × {sheet_h:.1f} pt  ({sheet_w/72:.2f}″ × {sheet_h/72:.2f}″)")
@@ -198,39 +189,72 @@ def main():
     # Offset correction for non-zero mediabox origins
     dx, dy = -x0, -y0
 
-    for s in range(num_sheets):
-        base = s * pages_per_sheet
-        p = xobjs[base : base + pages_per_sheet]
+    # ── Folio grid: 4 rows × 2 folio-columns (8 folios per side) ──
+    # folio f → folio_row = f // 2, folio_col = f % 2
+    # Each folio occupies cells [folio_col*2, folio_col*2+1] in its row.
+    #
+    # Signatures claim consecutive folios row-major:
+    #   sig 0 → f0..f(F-1), sig 1 → f(F)..f(2F-1), etc.
+    #
+    # Page formulas (1-indexed, O = global_sig_index * P):
+    #   ob_left(d)  = O + P - 2d
+    #   ob_right(d) = O + 2d + 1
+    #   rev_left(d) = O + P//2 - 2d
+    #   rev_right(d)= O + P//2 + 2d + 1
+    #
+    # Reverse mirror (long-edge duplex):
+    #   mirror_col = 1 - folio_col
+    #   mirror_local_row = (rows_per_sig - 1) - local_row
+    #   mirror_folio_row = sig_start_row + mirror_local_row
 
-        front_placements = []
-        back_placements = []
+    rows_per_sig = F // 2   # folio rows per signature (2 folios per row)
 
-        for f in range(num_folios):
-            gc = f % fcols           # grid column of this folio
-            gr = f // fcols          # grid row of this folio
-            fb = f * 4               # base index within this sheet's pages
+    for sheet_idx in range(num_sheets):
+        ob_placements = []
+        rev_placements = []
 
-            # Y position (PDF origin = bottom-left, row 0 = top)
-            y_pos = (frows - 1 - gr) * ph
+        for local_sig in range(sigs_per_sheet):
+            global_sig = sheet_idx * sigs_per_sheet + local_sig
+            O = global_sig * P          # 1-indexed offset base
 
-            # ── Side A (Front): page[fb+3] left, page[fb+0] right ──
-            front_x = gc * 2 * pw
-            front_placements.append((p[fb + 3], dx + front_x,      dy + y_pos))
-            front_placements.append((p[fb + 0], dx + front_x + pw, dy + y_pos))
+            sig_start_folio = local_sig * F
+            sig_start_row = sig_start_folio // 2
 
-            # ── Side B (Back): page[fb+1] left, page[fb+2] right ──
-            # Mirror columns horizontally for long-edge duplex
-            back_gc = fcols - 1 - gc
-            back_x = back_gc * 2 * pw
-            back_placements.append((p[fb + 1], dx + back_x,      dy + y_pos))
-            back_placements.append((p[fb + 2], dx + back_x + pw, dy + y_pos))
+            for d in range(F):
+                global_folio = sig_start_folio + d
+                folio_row = global_folio // 2
+                folio_col = global_folio % 2
 
-        out.pages.append(make_sheet(out, sheet_w, sheet_h, front_placements, crop))
-        out.pages.append(make_sheet(out, sheet_w, sheet_h, back_placements, crop))
+                # 1-indexed page numbers → 0-indexed
+                ob_l  = (O + P - 2 * d) - 1
+                ob_r  = (O + 2 * d + 1) - 1
+                rev_l = (O + P // 2 - 2 * d) - 1
+                rev_r = (O + P // 2 + 2 * d + 1) - 1
+
+                # ── Obverse placement ──
+                left_col  = folio_col * 2
+                right_col = folio_col * 2 + 1
+                y = (3 - folio_row) * ph
+
+                ob_placements.append((xobjs[ob_l], dx + left_col * pw,  dy + y))
+                ob_placements.append((xobjs[ob_r], dx + right_col * pw, dy + y))
+
+                # ── Reverse placement ──
+                # No column mirroring in the PDF — the printer's duplex
+                # mechanism handles the physical left↔right flip.
+                rev_left_col  = folio_col * 2
+                rev_right_col = folio_col * 2 + 1
+                rev_y = (3 - folio_row) * ph
+
+                rev_placements.append((xobjs[rev_l], dx + rev_left_col * pw,  dy + rev_y))
+                rev_placements.append((xobjs[rev_r], dx + rev_right_col * pw, dy + rev_y))
+
+        out.pages.append(make_sheet(out, sheet_w, sheet_h, ob_placements, crop))
+        out.pages.append(make_sheet(out, sheet_w, sheet_h, rev_placements, crop))
 
     out.save(args.output_file)
     print(f"\nDone → {args.output_file}")
-    print(f"Output: {len(out.pages)} page(s) ({num_sheets} sheet(s), front + back)")
+    print(f"Output: {len(out.pages)} page(s) ({num_sheets} sheet(s), obverse + reverse)")
 
 
 if __name__ == "__main__":
