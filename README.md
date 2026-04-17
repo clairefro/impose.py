@@ -1,4 +1,4 @@
-# katte-p
+# impose.py for katte press
 
 PDF imposition tool for **cut-and-stack bookbinding** (sextodecimo / 16mo).
 
@@ -14,7 +14,23 @@ Each output sheet has a **front** (Side A) and **back** (Side B) with book pages
 
 ## Install
 
-Requires **Python 3.8+**.
+Requires **Python 3.8+** and a system install of [qpdf](https://github.com/qpdf/qpdf) (needed by pikepdf).
+
+### System dependencies
+
+**macOS:**
+
+```bash
+brew install qpdf
+```
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt install qpdf
+```
+
+### Python setup
 
 ```bash
 # Clone the repo
@@ -23,11 +39,18 @@ cd katte-p
 
 # Create a virtual environment (recommended)
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate    # macOS / Linux
+# .venv\Scripts\activate     # Windows
 
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+> **Tip:** Always activate the venv before running the script. If you see `ModuleNotFoundError: No module named 'pikepdf'`, you likely forgot to activate it:
+>
+> ```bash
+> source .venv/bin/activate
+> ```
 
 ## Usage
 
