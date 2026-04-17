@@ -228,8 +228,8 @@ def main():
                 # 1-indexed page numbers → 0-indexed
                 ob_l  = (O + P - 2 * d) - 1
                 ob_r  = (O + 2 * d + 1) - 1
-                rev_l = (O + P // 2 - 2 * d) - 1
-                rev_r = (O + P // 2 + 2 * d + 1) - 1
+                rev_l = (O + 2 * d + 2) - 1
+                rev_r = (O + P - 2 * d - 1) - 1
 
                 # ── Obverse placement ──
                 left_col  = folio_col * 2
@@ -240,10 +240,11 @@ def main():
                 ob_placements.append((xobjs[ob_r], dx + right_col * pw, dy + y))
 
                 # ── Reverse placement ──
-                # No column mirroring in the PDF — the printer's duplex
-                # mechanism handles the physical left↔right flip.
-                rev_left_col  = folio_col * 2
-                rev_right_col = folio_col * 2 + 1
+                # Mirror folio column (left↔right) so the back of
+                # the folio at col0 appears at col1 and vice versa.
+                mirror_col = 1 - folio_col
+                rev_left_col  = mirror_col * 2
+                rev_right_col = mirror_col * 2 + 1
                 rev_y = (3 - folio_row) * ph
 
                 rev_placements.append((xobjs[rev_l], dx + rev_left_col * pw,  dy + rev_y))
