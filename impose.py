@@ -32,7 +32,8 @@ def parse_args():
         description="Imposition for cut-and-stack bookbinding."
     )
     p.add_argument("input_file", help="Input manuscript PDF (one page = one book page)")
-    p.add_argument("output_file", help="Output imposed PDF")
+    p.add_argument("output_file", nargs="?", default=None,
+                   help="Output imposed PDF (default: <input>_f<folios>.pdf)")
     p.add_argument(
         "-f", "--folios", type=int, default=4,
         help="Folios per signature (default: 4). Any even number >= 2. "
@@ -46,6 +47,10 @@ def parse_args():
     args = p.parse_args()
     if args.folios != 0 and (args.folios < 2 or args.folios % 2 != 0):
         p.error("folios must be 0 or an even number >= 2")
+    if args.output_file is None:
+        import os
+        base, _ = os.path.splitext(args.input_file)
+        args.output_file = f"{base}_f{args.folios}.pdf"
     return args
 
 
