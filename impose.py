@@ -75,25 +75,40 @@ def page_to_xobject(out_pdf, src_pdf, page_idx):
     return xobj, bbox
 
 
-def crop_marks_stream(sheet_w, sheet_h, v_cuts, h_cuts):
-    """Return content-stream bytes for thin crop marks at all cut lines."""
-    m = 36   # mark length (pt, ~0.5 in)
-    g = 2    # gap from sheet edge (pt)
+def crop_marks_stream(sheet_w, sheet_h, v_cuts, h_cuts, v_folds, h_folds):
+    """Return content-stream bytes for crop marks.
+
+    Crosshairs at cut-line intersections; small margin ticks on fold lines.
+    """
+    cell_w = sheet_w / 4
+    cell_h = sheet_h / 4
+    m = min(cell_w, cell_h) * 0.08   # crosshair length: 8% of smallest cell dim
+    fm = m * 0.4                      # fold tick length (smaller)
+    g = m * 0.06                      # gap from sheet edge
     ops = ["q", "0.5 0.5 0.5 RG", "0.25 w"]
 
+    all_v = set(v_cuts) | set(v_folds)
+    all_h = set(h_cuts) | set(h_folds)
+    v_cut_set = set(v_cuts)
+    h_cut_set = set(h_cuts)
+
+    # ── Vertical lines: edge marks ──
+    for cx in sorted(all_v):
+        t = m if cx in v_cut_set else fm
+        ops.append(f"{cx:.2f} {sheet_h - g:.2f} m {cx:.2f} {sheet_h - g - t:.2f} l S")
+        ops.append(f"{cx:.2f} {g:.2f} m {cx:.2f} {g + t:.2f} l S")
+
+    # ── Horizontal lines: edge marks ──
+    for cy in sorted(all_h):
+        t = m if cy in h_cut_set else fm
+        ops.append(f"{g:.2f} {cy:.2f} m {g + t:.2f} {cy:.2f} l S")
+        ops.append(f"{sheet_w - g:.2f} {cy:.2f} m {sheet_w - g - t:.2f} {cy:.2f} l S")
+
+    # ── Crosshairs only where TWO cut lines intersect ──
     for cx in v_cuts:
-        # Top and bottom edge marks
-        ops.append(f"{cx:.2f} {sheet_h - g:.2f} m {cx:.2f} {sheet_h - g - m:.2f} l S")
-        ops.append(f"{cx:.2f} {g:.2f} m {cx:.2f} {g + m:.2f} l S")
-        # Cross marks at each horizontal cut intersection
         for cy in h_cuts:
             ops.append(f"{cx:.2f} {cy - m:.2f} m {cx:.2f} {cy + m:.2f} l S")
             ops.append(f"{cx - m:.2f} {cy:.2f} m {cx + m:.2f} {cy:.2f} l S")
-
-    for cy in h_cuts:
-        # Left and right edge marks
-        ops.append(f"{g:.2f} {cy:.2f} m {g + m:.2f} {cy:.2f} l S")
-        ops.append(f"{sheet_w - g:.2f} {cy:.2f} m {sheet_w - g - m:.2f} {cy:.2f} l S")
 
     ops.append("Q")
     return "\n".join(ops).encode()
@@ -165,9 +180,20 @@ def main():
     sheet_w = 4 * pw
     sheet_h = 4 * ph
 
-    # Cut lines between columns and rows
-    v_cuts = [c * pw for c in range(1, 4)]
-    h_cuts = [r * ph for r in range(1, 4)]
+    # Vertical: folio spines are folds (cols 1,3), cut between folio cols (col 2)
+    v_cuts  = [2 * pw]
+    v_folds = [pw, 3 * pw]
+
+    # Horizontal: cut lines separate signatures, fold lines are within sigs
+    rows_per_sig = F // 2
+    h_cuts  = []
+    h_folds = []
+    for r in range(1, 4):
+        y = r * ph
+        if r % rows_per_sig == 0 and r < 4:
+            h_cuts.append(y)
+        else:
+            h_folds.append(y)
 
     num_sheets = total // pages_per_sheet
 
@@ -184,7 +210,7 @@ def main():
         xobj, _ = page_to_xobject(out, src, i)
         xobjs.append(xobj)
 
-    crop = crop_marks_stream(sheet_w, sheet_h, v_cuts, h_cuts)
+    crop = crop_marks_stream(sheet_w, sheet_h, v_cuts, h_cuts, v_folds, h_folds)
 
     # Offset correction for non-zero mediabox origins
     dx, dy = -x0, -y0
