@@ -39,7 +39,7 @@ def parse_args():
              "1 folio = 4 book pages."
     )
     p.add_argument(
-        "--no-marks", action="store_true",
+        "-m", "--no-marks", action="store_true",
         help="Hide all crop marks, indicators, and crosshairs."
     )
     args = p.parse_args()

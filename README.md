@@ -141,10 +141,11 @@ python impose.py <input.pdf> <output.pdf> [options]
 
 ### Options
 
-| Option           | Description                                                                    |
-| ---------------- | ------------------------------------------------------------------------------ |
-| `-f`, `--folios` | Folios per signature (default: 4). Any even number ≥ 2. 1 folio = 4 book pages |
-| `-h`, `--help`   | Show help                                                                      |
+| Option                  | Description                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `-f`, `--folios`        | Folios per signature (default: 4). Any even number ≥ 2. 1 folio = 4 book pages |
+| `-m`, `--no-marks`      | Hide all crop marks, indicators, and crosshairs                                |
+| `-h`, `--help`          | Show help                                                                      |
 
 ### Examples
 
@@ -160,6 +161,9 @@ python impose.py manuscript.pdf imposed.pdf -f 6
 
 # 8 folios (32 pages/sig, 4×4 grid)
 python impose.py manuscript.pdf imposed.pdf -f 8
+
+# No crop marks
+python impose.py manuscript.pdf imposed.pdf -m
 ```
 
 ### Printing
