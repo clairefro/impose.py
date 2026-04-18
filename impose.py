@@ -38,6 +38,10 @@ def parse_args():
         help="Folios per signature (default: 4). Any even number >= 2. "
              "1 folio = 4 book pages."
     )
+    p.add_argument(
+        "--no-marks", action="store_true",
+        help="Hide all crop marks, indicators, and crosshairs."
+    )
     args = p.parse_args()
     if args.folios < 2 or args.folios % 2 != 0:
         p.error("folios must be an even number >= 2")
@@ -232,7 +236,9 @@ def main():
         xobj, _ = page_to_xobject(out, src, i)
         xobjs.append(xobj)
 
-    crop = crop_marks_stream(sheet_w, sheet_h, grid_cols, grid_rows, v_cuts, h_cuts, v_folds, h_folds)
+    crop = None if args.no_marks else crop_marks_stream(
+        sheet_w, sheet_h, grid_cols, grid_rows, v_cuts, h_cuts, v_folds, h_folds
+    )
 
     # Offset correction for non-zero mediabox origins
     dx, dy = -x0, -y0
