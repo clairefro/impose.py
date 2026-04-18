@@ -39,10 +39,13 @@ Folios are arranged in a grid of **(F/2 × sigs_per_sheet) rows × 4 columns** (
 
 | `-f` | Folios/sig | Pages/sig | Sigs/sheet | Grid | Pages/sheet |
 | ---- | ---------- | --------- | ---------- | ---- | ----------- |
+| 0    | —          | —         | —          | 4×4  | 16          |
 | 2    | 2          | 8         | 4          | 4×4  | 32          |
 | 4    | 4          | 16        | 2          | 4×4  | 32          |
 | 6    | 6          | 24        | 1          | 3×4  | 24          |
 | 8    | 8          | 32        | 1          | 4×4  | 32          |
+
+`-f 0` is a special mode: pages are laid out in **manuscript order** (1, 2, 3, …) in a 4×4 grid, single-sided, with no imposition.
 
 ### Page ordering by folio count
 
@@ -143,7 +146,7 @@ python impose.py <input.pdf> <output.pdf> [options]
 
 | Option                  | Description                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------ |
-| `-f`, `--folios`        | Folios per signature (default: 4). Any even number ≥ 2. 1 folio = 4 book pages |
+| `-f`, `--folios`        | Folios per signature (default: 4). Any even number ≥ 2, or 0 for sequential layout. 1 folio = 4 book pages |
 | `-m`, `--no-marks`      | Hide all crop marks, indicators, and crosshairs                                |
 | `-h`, `--help`          | Show help                                                                      |
 
@@ -161,6 +164,9 @@ python impose.py manuscript.pdf imposed.pdf -f 6
 
 # 8 folios (32 pages/sig, 4×4 grid)
 python impose.py manuscript.pdf imposed.pdf -f 8
+
+# Sequential layout (no imposition, 4×4 grid)
+python impose.py manuscript.pdf imposed.pdf -f 0
 
 # No crop marks
 python impose.py manuscript.pdf imposed.pdf -m

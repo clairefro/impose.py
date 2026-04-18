@@ -36,6 +36,7 @@ def parse_args():
     p.add_argument(
         "-f", "--folios", type=int, default=4,
         help="Folios per signature (default: 4). Any even number >= 2. "
+             "Use 0 for simple sequential 4×4 layout (no imposition). "
              "1 folio = 4 book pages."
     )
     p.add_argument(
@@ -43,8 +44,8 @@ def parse_args():
         help="Hide all crop marks, indicators, and crosshairs."
     )
     args = p.parse_args()
-    if args.folios < 2 or args.folios % 2 != 0:
-        p.error("folios must be an even number >= 2")
+    if args.folios != 0 and (args.folios < 2 or args.folios % 2 != 0):
+        p.error("folios must be 0 or an even number >= 2")
     return args
 
 
@@ -72,7 +73,15 @@ def page_to_xobject(out_pdf, src_pdf, page_idx):
     xobj[Name.BBox] = Array([Decimal(str(v)) for v in bbox])
 
     res = page.obj.get(Name.Resources)
+    if res is None:
+        # Inherited resources — walk up the page tree
+        node = page.obj.get(Name.Parent)
+        while node is not None and res is None:
+            res = node.get(Name.Resources)
+            node = node.get(Name.Parent)
     if res is not None:
+        # Make indirect so copy_foreign can handle it
+        res = src_pdf.make_indirect(res)
         xobj[Name.Resources] = out_pdf.copy_foreign(res)
 
     return xobj, bbox
@@ -173,11 +182,18 @@ def make_sheet(out_pdf, sheet_w, sheet_h, placements, crop_bytes):
 def main():
     args = parse_args()
     F = args.folios                    # folios per signature
-    P = 4 * F                          # pages per signature
-    sigs_per_sheet = max(1, 8 // F)    # signatures per sheet
-    grid_rows = sigs_per_sheet * (F // 2)  # rows in output grid
-    grid_cols = 4                      # always 2 folio-columns × 2 cells
-    pages_per_sheet = sigs_per_sheet * P
+    sequential = (F == 0)              # simple sequential layout
+
+    if sequential:
+        grid_rows = 4
+        grid_cols = 4
+        pages_per_sheet = 16           # 4×4, single-sided
+    else:
+        P = 4 * F                          # pages per signature
+        sigs_per_sheet = max(1, 8 // F)    # signatures per sheet
+        grid_rows = sigs_per_sheet * (F // 2)  # rows in output grid
+        grid_cols = 4                      # always 2 folio-columns × 2 cells
+        pages_per_sheet = sigs_per_sheet * P
 
     src = Pdf.open(args.input_file)
     total = len(src.pages)
@@ -204,6 +220,40 @@ def main():
     # Sheet geometry
     sheet_w = grid_cols * pw
     sheet_h = grid_rows * ph
+
+    if sequential:
+        num_sheets = total // pages_per_sheet
+        print(f"Mode       : sequential (no imposition)")
+        print(f"Grid       : {grid_rows}×{grid_cols}")
+        print(f"Pages      : {total} ({num_sheets} sheet(s))")
+        print(f"Page size  : {pw:.1f} × {ph:.1f} pt  ({pw/72:.2f}″ × {ph/72:.2f}″)")
+        print(f"Sheet size : {sheet_w:.1f} × {sheet_h:.1f} pt  ({sheet_w/72:.2f}″ × {sheet_h/72:.2f}″)")
+
+        out = Pdf.new()
+        xobjs = []
+        for i in range(total):
+            xobj, _ = page_to_xobject(out, src, i)
+            xobjs.append(xobj)
+
+        dx, dy = -x0, -y0
+
+        for sheet_idx in range(num_sheets):
+            placements = []
+            base = sheet_idx * pages_per_sheet
+            for i in range(pages_per_sheet):
+                row = i // grid_cols
+                col = i % grid_cols
+                x = dx + col * pw
+                y = dy + (grid_rows - 1 - row) * ph
+                placements.append((xobjs[base + i], x, y))
+            out.pages.append(make_sheet(out, sheet_w, sheet_h, placements, None))
+
+        out.save(args.output_file)
+        print(f"\nDone → {args.output_file}")
+        print(f"Output: {len(out.pages)} page(s) ({num_sheets} sheet(s))")
+        return
+
+    # ── Imposition mode ──
 
     # Vertical: folio spines are folds (cols 1,3), cut between folio cols (col 2)
     v_cuts  = [2 * pw]
