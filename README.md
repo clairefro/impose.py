@@ -132,44 +132,47 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-python impose.py <input.pdf> <output.pdf> [options]
+python impose.py <input.pdf> [output.pdf] [options]
 ```
 
 ### Arguments
 
-| Argument     | Description                                   |
-| ------------ | --------------------------------------------- |
-| `input.pdf`  | Manuscript PDF — one PDF page = one book page |
-| `output.pdf` | Output imposed PDF                            |
+| Argument     | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `input.pdf`  | Manuscript PDF — one PDF page = one book page         |
+| `output.pdf` | Output imposed PDF (default: `<input>_f<folios>.pdf`) |
 
 ### Options
 
-| Option                  | Description                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------ |
-| `-f`, `--folios`        | Folios per signature (default: 4). Any even number ≥ 2, or 0 for sequential layout. 1 folio = 4 book pages |
-| `-m`, `--no-marks`      | Hide all crop marks, indicators, and crosshairs                                |
-| `-h`, `--help`          | Show help                                                                      |
+| Option             | Description                                                                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `-f`, `--folios`   | Folios per signature (default: 4). Any even number ≥ 2, or 0 for sequential layout. 1 folio = 4 book pages |
+| `-m`, `--no-marks` | Hide all crop marks, indicators, and crosshairs                                                            |
+| `-h`, `--help`     | Show help                                                                                                  |
 
 ### Examples
 
 ```bash
-# Default (16 pages/sig, 4×4 grid)
-python impose.py manuscript.pdf imposed.pdf
+# Default (4 folios) → manuscript_f4.pdf
+python impose.py manuscript.pdf
 
-# 2 folios (8 pages/sig, 4 sigs/sheet)
-python impose.py manuscript.pdf imposed.pdf -f 2
+# 2 folios → manuscript_f2.pdf
+python impose.py manuscript.pdf -f 2
 
-# 6 folios (24 pages/sig, 3×4 grid)
-python impose.py manuscript.pdf imposed.pdf -f 6
+# 6 folios → manuscript_f6.pdf
+python impose.py manuscript.pdf -f 6
 
-# 8 folios (32 pages/sig, 4×4 grid)
-python impose.py manuscript.pdf imposed.pdf -f 8
+# 8 folios → manuscript_f8.pdf
+python impose.py manuscript.pdf -f 8
 
-# Sequential layout (no imposition, 4×4 grid)
-python impose.py manuscript.pdf imposed.pdf -f 0
+# Sequential layout (no imposition) → manuscript_f0.pdf
+python impose.py manuscript.pdf -f 0
 
 # No crop marks
-python impose.py manuscript.pdf imposed.pdf -m
+python impose.py manuscript.pdf -f 4 -m
+
+# Custom output filename
+python impose.py manuscript.pdf my_output.pdf -f 4
 ```
 
 ### Printing
@@ -177,6 +180,7 @@ python impose.py manuscript.pdf imposed.pdf -m
 - Print the output PDF **duplex** (long-edge flip)
 - Each pair of output pages is one physical sheet (front + back)
 - Cut along the crop marks and stack to assemble signatures
+- A **dashed line** (`- -`) in the margins marks the end of a signature; solid lines are folio cuts inside a signature
 
 ## Notes
 
