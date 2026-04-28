@@ -226,25 +226,25 @@ When not specified, `impose_a.py` uses:
 - `--page-size A8`
 - `--glue-margin-cm 1.0`
 - `--fold-crosshair-leg-pt 2.0`
-- `--blank-front 0`
-- `--blank-back 0`
+- `--blank-front 1`
+- `--blank-back 1`
 - `--duplex` disabled (single-sided output)
 - `--no-fold-crosshairs` disabled (fold crosshairs are shown)
 - `--no-marks` disabled (strip cut lines and fold crosshairs are shown)
 
 ### Key options
 
-| Option                    | Description                                                                                                   |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `--paper-size`            | Printer paper size (`A5`, `A4`, `A3`, `Letter`, `Legal`, `Tabloid`) or custom `WxH` with unit (`mm/cm/in/pt`) |
+| Option                    | Description                                                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--paper-size`            | Printer paper size (`A5`, `A4`, `A3`, `Letter`, `Legal`, `Tabloid`) or custom `WxH` with unit (`mm/cm/in/pt`)                                |
 | `--page-size`             | Accordion panel size. Named sizes: `A3`, `A4`, `A5`, `A6`, `A7`, `A8`, `A9`, `A10`; or custom `WxH` with unit (`mm/cm/in/pt`). Default: `A8` |
-| `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                               |
-| `--blank-front`           | Add blank pages before manuscript pages                                                                       |
-| `--blank-back`            | Add blank pages after manuscript pages                                                                        |
-| `--duplex`                | Output front+back pages for duplex printing (back side mirrored for long-edge flip)                           |
-| `--no-fold-crosshairs`    | Hide fold crosshairs but keep strip cut lines                                                                 |
-| `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `2.0`)                                               |
-| `-m`, `--no-marks`        | Hide all marks (cut lines + fold crosshairs)                                                                  |
+| `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                                                              |
+| `--blank-front`           | Add blank pages before manuscript pages                                                                                                      |
+| `--blank-back`            | Add blank pages after manuscript pages                                                                                                       |
+| `--duplex`                | Output front+back pages for duplex printing (back side mirrored for long-edge flip)                                                          |
+| `--no-fold-crosshairs`    | Hide fold crosshairs but keep strip cut lines                                                                                                |
+| `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `2.0`)                                                                              |
+| `-m`, `--no-marks`        | Hide all marks (cut lines + fold crosshairs)                                                                                                 |
 
 ### Examples
 

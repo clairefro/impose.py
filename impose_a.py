@@ -146,14 +146,14 @@ def parse_args():
     p.add_argument(
         "--blank-front",
         type=int,
-        default=0,
-        help="Number of blank pages to prepend before manuscript pages.",
+        default=1,
+        help="Number of blank pages to prepend before manuscript pages (default: 1).",
     )
     p.add_argument(
         "--blank-back",
         type=int,
-        default=0,
-        help="Number of blank pages to append after manuscript pages.",
+        default=1,
+        help="Number of blank pages to append after manuscript pages (default: 1).",
     )
     p.add_argument(
         "-m",
