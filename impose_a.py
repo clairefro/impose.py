@@ -172,23 +172,24 @@ def page_to_xobject(out_pdf, src_pdf, page_idx):
     return xobj, bbox
 
 
-def fold_crosshair_stream(sheet_w, strip_y, strip_h, fold_xs, panel_w, panel_h):
-    """Return faint crosshairs at each fold line on strip top and bottom edges."""
+def fold_crosshair_stream(sheet_w, strip_ys, strip_h, fold_xs, panel_w, panel_h):
+    """Return faint crosshairs at each fold line for each strip row."""
     if not fold_xs:
         return None
 
     m = min(panel_w, panel_h) * 0.06
     ops = ["q", "0.78 0.78 0.78 RG", "0.2 w"]
 
-    y_bot = strip_y
-    y_top = strip_y + strip_h
+    for strip_y in strip_ys:
+        y_bot = strip_y
+        y_top = strip_y + strip_h
 
-    for x in fold_xs:
-        ops.append(f"{x:.2f} {y_bot - m:.2f} m {x:.2f} {y_bot + m:.2f} l S")
-        ops.append(f"{x - m:.2f} {y_bot:.2f} m {x + m:.2f} {y_bot:.2f} l S")
+        for x in fold_xs:
+            ops.append(f"{x:.2f} {y_bot - m:.2f} m {x:.2f} {y_bot + m:.2f} l S")
+            ops.append(f"{x - m:.2f} {y_bot:.2f} m {x + m:.2f} {y_bot:.2f} l S")
 
-        ops.append(f"{x:.2f} {y_top - m:.2f} m {x:.2f} {y_top + m:.2f} l S")
-        ops.append(f"{x - m:.2f} {y_top:.2f} m {x + m:.2f} {y_top:.2f} l S")
+            ops.append(f"{x:.2f} {y_top - m:.2f} m {x:.2f} {y_top + m:.2f} l S")
+            ops.append(f"{x - m:.2f} {y_top:.2f} m {x + m:.2f} {y_top:.2f} l S")
 
     ops.append("Q")
     return "\n".join(ops).encode()
@@ -260,6 +261,14 @@ def main():
         )
         sys.exit(2)
 
+    rows_per_sheet = int(sheet_h // target_page_h)
+    if rows_per_sheet < 1:
+        print(
+            "Error: paper/page settings allow fewer than 1 strip row per sheet.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     panels_per_sheet = int(usable_w // target_page_w)
     if panels_per_sheet < 2:
         print(
@@ -268,25 +277,33 @@ def main():
         )
         sys.exit(2)
 
+    pages_per_sheet = panels_per_sheet * rows_per_sheet
+
     src = Pdf.open(args.input_file)
     total_pages = len(src.pages)
     if total_pages == 0:
         print("Error: input PDF has no pages.", file=sys.stderr)
         sys.exit(2)
 
-    num_sheets = math.ceil(total_pages / panels_per_sheet)
+    num_sheets = math.ceil(total_pages / pages_per_sheet)
 
-    strip_y = (sheet_h - target_page_h) / 2.0
+    y_offset = (sheet_h - (rows_per_sheet * target_page_h)) / 2.0
+    strip_ys = [
+        y_offset + ((rows_per_sheet - 1 - row) * target_page_h)
+        for row in range(rows_per_sheet)
+    ]
     fold_xs = [glue_margin + (i * target_page_w) for i in range(1, panels_per_sheet)]
     marks = None if args.no_marks else fold_crosshair_stream(
-        sheet_w, strip_y, target_page_h, fold_xs, target_page_w, target_page_h
+        sheet_w, strip_ys, target_page_h, fold_xs, target_page_w, target_page_h
     )
 
     print("Mode       : accordion strip")
     print(f"Paper size : {sheet_w / MM_TO_PT:.1f} x {sheet_h / MM_TO_PT:.1f} mm (landscape)")
     print(f"Page size  : {target_page_w / MM_TO_PT:.1f} x {target_page_h / MM_TO_PT:.1f} mm")
     print(f"Glue margin: {args.glue_margin_cm:.2f} cm each end")
-    print(f"Panels     : {panels_per_sheet} per sheet")
+    print(f"Rows       : {rows_per_sheet} strip row(s) per sheet")
+    print(f"Panels     : {panels_per_sheet} per row")
+    print(f"Capacity   : {pages_per_sheet} page(s) per sheet")
     print(f"Input pages: {total_pages}")
     print(f"Sheets     : {num_sheets}")
 
@@ -303,27 +320,29 @@ def main():
     for sheet_idx in range(num_sheets):
         placements = []
 
-        for panel_idx in range(panels_per_sheet):
-            page_idx = sheet_idx * panels_per_sheet + panel_idx
-            if page_idx >= total_pages:
-                continue
+        for row_idx, strip_y in enumerate(strip_ys):
+            for panel_idx in range(panels_per_sheet):
+                local_idx = row_idx * panels_per_sheet + panel_idx
+                page_idx = sheet_idx * pages_per_sheet + local_idx
+                if page_idx >= total_pages:
+                    continue
 
-            bbox = bboxes[page_idx]
-            src_w = bbox[2] - bbox[0]
-            src_h = bbox[3] - bbox[1]
-            if src_w <= 0 or src_h <= 0:
-                continue
+                bbox = bboxes[page_idx]
+                src_w = bbox[2] - bbox[0]
+                src_h = bbox[3] - bbox[1]
+                if src_w <= 0 or src_h <= 0:
+                    continue
 
-            # Preserve aspect ratio and center content within the target panel.
-            scale = min(target_page_w / src_w, target_page_h / src_h)
-            draw_w = src_w * scale
-            draw_h = src_h * scale
+                # Preserve aspect ratio and center content within the target panel.
+                scale = min(target_page_w / src_w, target_page_h / src_h)
+                draw_w = src_w * scale
+                draw_h = src_h * scale
 
-            panel_x = glue_margin + (panel_idx * target_page_w)
-            tx = panel_x + (target_page_w - draw_w) / 2.0 - (bbox[0] * scale)
-            ty = strip_y + (target_page_h - draw_h) / 2.0 - (bbox[1] * scale)
+                panel_x = glue_margin + (panel_idx * target_page_w)
+                tx = panel_x + (target_page_w - draw_w) / 2.0 - (bbox[0] * scale)
+                ty = strip_y + (target_page_h - draw_h) / 2.0 - (bbox[1] * scale)
 
-            placements.append((xobjs[page_idx], tx, ty, scale, scale))
+                placements.append((xobjs[page_idx], tx, ty, scale, scale))
 
         out.pages.append(make_sheet(out, sheet_w, sheet_h, placements, marks))
 
