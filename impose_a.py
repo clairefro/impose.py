@@ -87,11 +87,35 @@ def parse_paper_size(spec):
     return _parse_wh_spec(spec, default_unit="mm")
 
 
+def get_paper_size_label(spec):
+    """Return preset name (lowercase) if spec is a named size, else dimensions."""
+    key = spec.strip().upper()
+    if key in PAPER_PRESETS_MM:
+        return key.lower()
+    # Custom size: return as dimensions
+    w, h = _parse_wh_spec(spec, default_unit="mm")
+    w_mm = _mm_label_from_pt(w)
+    h_mm = _mm_label_from_pt(h)
+    return f"{w_mm}x{h_mm}"
+
+
 def parse_page_size(spec):
     key = spec.strip().upper()
     if key in PAGE_PRESETS_MM:
         return _mm_pair_to_pt(PAGE_PRESETS_MM[key])
     return _parse_wh_spec(spec, default_unit="mm")
+
+
+def get_page_size_label(spec):
+    """Return preset name (lowercase) if spec is a named size, else dimensions."""
+    key = spec.strip().upper()
+    if key in PAGE_PRESETS_MM:
+        return key.lower()
+    # Custom size: return as dimensions
+    w, h = _parse_wh_spec(spec, default_unit="mm")
+    w_mm = _mm_label_from_pt(w)
+    h_mm = _mm_label_from_pt(h)
+    return f"{w_mm}x{h_mm}"
 
 
 def _mm_label_from_pt(value_pt):
@@ -148,8 +172,8 @@ def parse_args():
     p.add_argument(
         "--fold-crosshair-leg-pt",
         type=float,
-        default=2.0,
-        help="Fold crosshair horizontal leg length in points (default: 2.0).",
+        default=8.0,
+        help="Fold crosshair horizontal leg length in points (default: 8.0).",
     )
     p.add_argument(
         "--blank-front",
@@ -178,8 +202,17 @@ def parse_args():
         "--duplex",
         action="store_true",
         help=(
-            "Generate front/back pages for duplex printing. "
-            "Back side is mirrored for long-edge flip."
+            "Generate front/back pages for duplex printing, long-edge flip (default). "
+            "Back content is rotated 180° to appear right-side-up after flipping."
+        ),
+    )
+    p.add_argument(
+        "--duplex-short",
+        action="store_true",
+        help=(
+            "Generate front/back pages for duplex printing, short-edge flip. "
+            "Back content is mirrored horizontally only (no rotation). "
+            "Implies --duplex."
         ),
     )
 
@@ -193,6 +226,8 @@ def parse_args():
         p.error("--blank-front must be >= 0")
     if args.blank_back < 0:
         p.error("--blank-back must be >= 0")
+    if args.duplex_short:
+        args.duplex = True
 
     return args
 
@@ -269,16 +304,14 @@ def fold_crosshair_stream(
         ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_bot:.2f} l S")
         ops.append(f"{strip_x0:.2f} {y_top:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
 
-        # Dotted glue-margin boundaries at both strip ends.
-        ops.append("[1 1.5] 0 d")
+        # Solid cut line on LEFT side (strip_x0).
         ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x0:.2f} {y_top:.2f} l S")
+
+        # Dotted glue guide on RIGHT side (strip_x1) only.
+        ops.append("[1 1.5] 0 d")
         ops.append(f"{strip_x1:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
 
-        # Second dotted columns show outer glue-flap boundaries.
-        if abs(flap_left_x - strip_x0) > 0.01:
-            ops.append(
-                f"{flap_left_x:.2f} {y_bot:.2f} m {flap_left_x:.2f} {y_top:.2f} l S"
-            )
+        # Dotted outer glue-flap boundary on RIGHT side only.
         if abs(flap_right_x - strip_x1) > 0.01:
             ops.append(
                 f"{flap_right_x:.2f} {y_bot:.2f} m {flap_right_x:.2f} {y_top:.2f} l S"
@@ -287,11 +320,9 @@ def fold_crosshair_stream(
 
         if include_fold_crosshairs:
             for x in fold_xs:
+                # Vertical segments only; horizontal line comes from intersection with cut lines.
                 ops.append(f"{x:.2f} {y_bot - m_v:.2f} m {x:.2f} {y_bot + m_v:.2f} l S")
-                ops.append(f"{x - m_h:.2f} {y_bot:.2f} m {x + m_h:.2f} {y_bot:.2f} l S")
-
                 ops.append(f"{x:.2f} {y_top - m_v:.2f} m {x:.2f} {y_top + m_v:.2f} l S")
-                ops.append(f"{x - m_h:.2f} {y_top:.2f} m {x + m_h:.2f} {y_top:.2f} l S")
 
     ops.append("Q")
     return "\n".join(ops).encode()
@@ -301,17 +332,31 @@ def make_sheet(out_pdf, sheet_w, sheet_h, placements, marks_bytes):
     """
     Build one output page (one printer sheet).
 
-    placements: [(xobj, tx, ty, sx, sy), ...]
+    placements: [(xobj, tx, ty, sx, sy, rotate180), ...]
+    rotate180: if True, rotate content 180° in place (for duplex back side)
     """
     xobj_dict = Dictionary()
     content_parts = []
 
-    for i, (xobj, tx, ty, sx, sy) in enumerate(placements):
+    for i, (xobj, tx, ty, sx, sy, rotate180) in enumerate(placements):
         xname = f"P{i}"
         xobj_dict[Name(f"/{xname}")] = out_pdf.make_indirect(xobj)
-        content_parts.append(
-            f"q {sx:.8f} 0 0 {sy:.8f} {tx:.8f} {ty:.8f} cm /{xname} Do Q"
-        )
+        if rotate180:
+            # 180° rotation: [-sx 0 0 -sy] with translation adjusted so content
+            # stays within its panel cell (translate to far corner then flip).
+            bbox = xobj[Name.BBox]
+            bx0, by0, bx1, by1 = (float(bbox[j]) for j in range(4))
+            bw = (bx1 - bx0) * sx
+            bh = (by1 - by0) * sy
+            e = tx + bw + bx0 * sx
+            f = ty + bh + by0 * sy
+            content_parts.append(
+                f"q {-sx:.8f} 0 0 {-sy:.8f} {e:.8f} {f:.8f} cm /{xname} Do Q"
+            )
+        else:
+            content_parts.append(
+                f"q {sx:.8f} 0 0 {sy:.8f} {tx:.8f} {ty:.8f} cm /{xname} Do Q"
+            )
 
     content = "\n".join(content_parts).encode()
     if marks_bytes:
@@ -340,24 +385,23 @@ def main():
 
     if args.output_file is None:
         base, _ = os.path.splitext(args.input_file)
-        paper_w_mm = _mm_label_from_pt(max(paper_w, paper_h))
-        paper_h_mm = _mm_label_from_pt(min(paper_w, paper_h))
-        page_w_mm = _mm_label_from_pt(target_page_w)
-        page_h_mm = _mm_label_from_pt(target_page_h)
+        paper_label = get_paper_size_label(args.paper_size)
+        page_label = get_page_size_label(args.page_size)
         glue_cm = _num_label(args.glue_margin_cm)
         cross_pt = _num_label(args.fold_crosshair_leg_pt)
         args.output_file = (
             f"{base}_acc"
-            f"_pap{paper_w_mm}x{paper_h_mm}"
-            f"_pg{page_w_mm}x{page_h_mm}"
-            f"_gl{glue_cm}"
-            f"_xh{cross_pt}"
-            f"_bf{args.blank_front}"
-            f"_bb{args.blank_back}"
-            f"_dup{int(args.duplex)}"
-            f"_mrk{int(not args.no_marks)}"
-            f"_fcx{int(not args.no_fold_crosshairs)}"
-            f".pdf"
+            f"_paper-{paper_label}"
+            f"_pg-{page_label}"
+            f"_gl-{glue_cm}"
+            + (f"_xh-{cross_pt}" if not args.no_fold_crosshairs else "")
+            + (f"_bf-{args.blank_front}" if args.blank_front != 1 else "")
+            + (f"_bb-{args.blank_back}" if args.blank_back != 1 else "")
+            + ("_duplex-lng" if args.duplex and not args.duplex_short else
+               "_duplex-sht" if args.duplex_short else "")
+            + ("_nomark" if args.no_marks else "")
+            + ("_noxh" if args.no_fold_crosshairs else "")
+            + ".pdf"
         )
 
     # Force landscape so pages run along the paper's long side.
@@ -396,22 +440,51 @@ def main():
         sys.exit(2)
 
     pages_per_side = panels_per_sheet * rows_per_sheet
-    pages_per_physical_sheet = pages_per_side * (2 if args.duplex else 1)
 
     src = Pdf.open(args.input_file)
     source_pages = len(src.pages)
-    page_slots = (
-        [None] * args.blank_front
-        + list(range(source_pages))
-        + [None] * args.blank_back
-    )
-    total_pages = len(page_slots)
+
+    if args.duplex:
+        # Source pages are split: first half on front, second half on back.
+        # Short-edge duplex keeps blank offsets aligned by slot index.
+        # Long-edge duplex shifts back-side leading blanks to the opposite edge.
+        n_front_content = math.ceil(source_pages / 2)
+        n_back_content = source_pages - n_front_content
+        min_side_len = args.blank_front + max(n_front_content, n_back_content) + args.blank_back
+        num_sheets = max(1, math.ceil(min_side_len / pages_per_side)) if (source_pages + args.blank_front + args.blank_back) > 0 else 0
+        total_side_pages = num_sheets * pages_per_side
+        front_slots = (
+            [None] * args.blank_front
+            + list(range(n_front_content))
+            + [None] * (total_side_pages - args.blank_front - n_front_content)
+        )
+        back_leading_blanks = args.blank_front if args.duplex_short else args.blank_back
+        back_slots = (
+            [None] * back_leading_blanks
+            + list(range(n_front_content, source_pages))
+            + [None] * (total_side_pages - back_leading_blanks - n_back_content)
+        )
+        back_blank_rule = (
+            "short-edge: align with front leading blanks"
+            if args.duplex_short
+            else "long-edge: use front trailing blanks on back leading edge"
+        )
+        total_pages = total_side_pages
+    else:
+        front_slots = (
+            [None] * args.blank_front
+            + list(range(source_pages))
+            + [None] * args.blank_back
+        )
+        back_slots = []
+        back_leading_blanks = 0
+        back_blank_rule = "single-sided"
+        total_pages = len(front_slots)
+        num_sheets = math.ceil(total_pages / pages_per_side) if total_pages > 0 else 0
 
     if total_pages == 0:
         print("Error: no pages to impose (input is empty and no blank pages requested).", file=sys.stderr)
         sys.exit(2)
-
-    num_sheets = math.ceil(total_pages / pages_per_physical_sheet)
 
     y_offset = (sheet_h - (rows_per_sheet * target_page_h)) / 2.0
     strip_ys = [
@@ -436,19 +509,27 @@ def main():
     print(f"Paper size : {sheet_w / MM_TO_PT:.1f} x {sheet_h / MM_TO_PT:.1f} mm (landscape)")
     print(f"Page size  : {target_page_w / MM_TO_PT:.1f} x {target_page_h / MM_TO_PT:.1f} mm")
     print(f"Glue margin: {args.glue_margin_cm:.2f} cm each end")
-    print(f"Duplex     : {'yes' if args.duplex else 'no'}")
+    duplex_mode = ("long-edge" if not args.duplex_short else "short-edge") if args.duplex else "no"
+    print(f"Duplex     : {duplex_mode}")
     print(f"Rows       : {rows_per_sheet} strip row(s) per sheet")
     print(f"Panels     : {panels_per_sheet} per row")
     if args.duplex:
         print(
             f"Capacity   : {pages_per_side} page(s)/side, "
-            f"{pages_per_physical_sheet} page(s)/sheet"
+            f"{pages_per_side * 2} page(s)/sheet"
         )
     else:
         print(f"Capacity   : {pages_per_side} page(s) per sheet")
     print(f"Input pages: {source_pages}")
     print(f"Blanks     : front={args.blank_front}, back={args.blank_back}")
-    print(f"Total pages: {total_pages}")
+    if args.duplex:
+        print(f"Total pages: {total_pages} per side ({total_pages * 2} front+back)")
+        print(
+            "Debug      : "
+            f"back-leading-blanks={back_leading_blanks} ({back_blank_rule})"
+        )
+    else:
+        print(f"Total pages: {total_pages}")
     print(f"Sheets     : {num_sheets}")
 
     out = Pdf.new()
@@ -461,17 +542,19 @@ def main():
         xobjs.append(xobj)
         bboxes.append(bbox)
 
-    def build_side_placements(side_base_idx, mirror_panels):
+    def build_side_placements(slots, sheet_idx, rotate180, reverse_rows=False):
         placements = []
+        side_base = sheet_idx * pages_per_side
 
         for row_idx, strip_y in enumerate(strip_ys):
+            slot_row_idx = (rows_per_sheet - 1 - row_idx) if reverse_rows else row_idx
             for panel_idx in range(panels_per_sheet):
-                local_idx = row_idx * panels_per_sheet + panel_idx
-                page_idx = side_base_idx + local_idx
-                if page_idx >= total_pages:
+                local_idx = slot_row_idx * panels_per_sheet + panel_idx
+                page_idx = side_base + local_idx
+                if page_idx >= len(slots):
                     continue
 
-                src_idx = page_slots[page_idx]
+                src_idx = slots[page_idx]
                 if src_idx is None:
                     continue
 
@@ -486,26 +569,27 @@ def main():
                 draw_w = src_w * scale
                 draw_h = src_h * scale
 
-                place_panel_idx = (
-                    (panels_per_sheet - 1 - panel_idx) if mirror_panels else panel_idx
-                )
-                panel_x = glue_margin + (place_panel_idx * target_page_w)
+                panel_x = glue_margin + (panel_idx * target_page_w)
                 tx = panel_x + (target_page_w - draw_w) / 2.0 - (bbox[0] * scale)
                 ty = strip_y + (target_page_h - draw_h) / 2.0 - (bbox[1] * scale)
 
-                placements.append((xobjs[src_idx], tx, ty, scale, scale))
+                placements.append((xobjs[src_idx], tx, ty, scale, scale, rotate180))
 
         return placements
 
     for sheet_idx in range(num_sheets):
-        sheet_base = sheet_idx * pages_per_physical_sheet
-
-        front = build_side_placements(sheet_base, mirror_panels=False)
+        front = build_side_placements(front_slots, sheet_idx, rotate180=False)
         out.pages.append(make_sheet(out, sheet_w, sheet_h, front, marks))
 
         if args.duplex:
-            back_base = sheet_base + pages_per_side
-            back = build_side_placements(back_base, mirror_panels=True)
+            # Long-edge: 180° rotation compensates for sheet flipping top-to-bottom.
+            # Short-edge: horizontal mirror only compensates for left-right flip.
+            back = build_side_placements(
+                back_slots,
+                sheet_idx,
+                rotate180=not args.duplex_short,
+                reverse_rows=(not args.duplex_short),
+            )
             out.pages.append(make_sheet(out, sheet_w, sheet_h, back, marks))
 
     out.save(args.output_file)

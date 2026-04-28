@@ -209,12 +209,16 @@ python impose_a.py <input.pdf> [output.pdf] [--page-size <size>] [options]
 If `output.pdf` is omitted, the default is:
 
 ```text
-<input>_acc_pap<sheetW>x<sheetH>_pg<pageW>x<pageH>_gl<cm>_xh<pt>_bf<n>_bb<n>_dup<0|1>_mrk<0|1>_fcx<0|1>.pdf
+<input>_acc_pap<name|WxH>_pg<name|WxH>_gl<cm>_xh<pt>_bf<n>_bb<n>[_dup-le|_dup-se]_mrk<0|1>_fcx<0|1>.pdf
 ```
 
-Abbreviations: `pap`=paper, `pg`=page, `gl`=glue margin, `xh`=crosshair leg, `dup`=duplex, `mrk`=all marks enabled, `fcx`=fold crosshairs enabled.
+Abbreviations: `pap`=paper size (name or dimensions), `pg`=page size (name or dimensions), `gl`=glue margin (cm), `xh`=crosshair leg (pt), `bf`/`bb`=blank front/back, `dup-le`=duplex long-edge, `dup-se`=duplex short-edge, `mrk`=marks enabled, `fcx`=fold crosshairs enabled.
 
-Example with defaults: `book_acc_pap297x210_pg52x74_gl1_xh2_bf1_bb1_dup0_mrk1_fcx1.pdf`
+Example with defaults (single-sided): `book_acc_papa4_pga8_gl1_xh8_bf1_bb1_mrk1_fcx1.pdf`
+
+Example with duplex long-edge: `book_acc_papa4_pga8_gl1_xh8_bf1_bb1_dup-le_mrk1_fcx1.pdf`
+
+Example with custom sizes: `book_acc_pap210x279_pg52x76_gl1_xh8_bf1_bb1_mrk1_fcx1.pdf`
 
 ### Defaults
 
@@ -223,10 +227,10 @@ When not specified, `impose_a.py` uses:
 - `--paper-size A4`
 - `--page-size A8`
 - `--glue-margin-cm 1.0`
-- `--fold-crosshair-leg-pt 2.0`
+- `--fold-crosshair-leg-pt 8.0`
 - `--blank-front 1`
 - `--blank-back 1`
-- `--duplex` disabled (single-sided output)
+- `--duplex` / `--duplex-short` disabled (single-sided output)
 - `--no-fold-crosshairs` disabled (fold crosshairs are shown)
 - `--no-marks` disabled (strip cut lines and fold crosshairs are shown)
 
@@ -239,9 +243,10 @@ When not specified, `impose_a.py` uses:
 | `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                                                              |
 | `--blank-front`           | Add blank pages before manuscript pages                                                                                                      |
 | `--blank-back`            | Add blank pages after manuscript pages                                                                                                       |
-| `--duplex`                | Output front+back pages for duplex printing (back side mirrored for long-edge flip)                                                          |
+| `--duplex`                | Front+back pages for **long-edge** duplex. Back content rotated 180° to appear right-side-up after flipping.                                 |
+| `--duplex-short`          | Front+back pages for **short-edge** duplex. Back content mirrored horizontally only. Implies `--duplex`.                                     |
 | `--no-fold-crosshairs`    | Hide fold crosshairs but keep strip cut lines                                                                                                |
-| `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `2.0`)                                                                              |
+| `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `8.0`)                                                                              |
 | `-m`, `--no-marks`        | Hide all marks (cut lines + fold crosshairs)                                                                                                 |
 
 ### Examples
@@ -253,14 +258,17 @@ python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm
 # Letter paper with front/back blanks and default glue margin
 python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --blank-front 2 --blank-back 2
 
-# Duplex output: first half on front, second half on back (long-edge mirrored)
+# Duplex long-edge (default flip mode) — back content rotated 180°
 python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --duplex
+
+# Duplex short-edge — back content mirrored horizontally only
+python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --duplex-short
 
 # Keep strip cut lines, but hide fold crosshairs
 python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --no-fold-crosshairs
 
-# Very subtle fold marks by shortening crosshair leg length
-python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --fold-crosshair-leg-pt 1.2
+# Subtle fold marks by shortening crosshair leg length
+python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --fold-crosshair-leg-pt 3.0
 
 # Hide all marks entirely
 python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --no-marks
