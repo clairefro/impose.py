@@ -187,3 +187,58 @@ python impose.py manuscript.pdf my_output.pdf -f 4
 - If the manuscript page count is not evenly divisible by the pages-per-sheet, blank pages are appended automatically
 - Thin gray crop marks are included on each sheet to guide cutting
 - The original page dimensions are preserved; the output sheet size scales to fit the grid
+
+## Accordion imposition (`impose_a.py`)
+
+Use `impose_a.py` to impose manuscript pages as accordion-fold strips laid out along the **long side** of printer paper.
+
+### What it does
+
+- Places pages in reading order into strip panels
+- Optimizes paper usage by packing multiple strip rows per sheet when they fit
+- Leaves configurable glue margins at strip ends (default: 1 cm)
+- Draws thin strip cut lines and optional faint fold crosshairs
+
+### Basic usage
+
+```bash
+python impose_a.py <input.pdf> [output.pdf] --page-size <WxHunit> [options]
+```
+
+If `output.pdf` is omitted, the default is:
+
+```text
+<input>_accordion_<w>x<h>mm.pdf
+```
+
+### Key options
+
+| Option                    | Description                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `--paper-size`            | Printer paper size (`A5`, `A4`, `A3`, `Letter`, `Legal`, `Tabloid`) or custom `WxH` with unit (`mm/cm/in/pt`) |
+| `--page-size`             | Required accordion panel size, e.g. `52x74mm`                                                                 |
+| `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                               |
+| `--blank-front`           | Add blank pages before manuscript pages                                                                       |
+| `--blank-back`            | Add blank pages after manuscript pages                                                                        |
+| `--no-fold-crosshairs`    | Hide fold crosshairs but keep strip cut lines                                                                 |
+| `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `2.0`)                                               |
+| `-m`, `--no-marks`        | Hide all marks (cut lines + fold crosshairs)                                                                  |
+
+### Examples
+
+```bash
+# A8 mini-book panels on A4 paper
+python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm
+
+# Letter paper with front/back blanks and default glue margin
+python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --blank-front 2 --blank-back 2
+
+# Keep strip cut lines, but hide fold crosshairs
+python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --no-fold-crosshairs
+
+# Very subtle fold marks by shortening crosshair leg length
+python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --fold-crosshair-leg-pt 1.2
+
+# Hide all marks entirely
+python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --no-marks
+```
