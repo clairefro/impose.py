@@ -121,6 +121,18 @@ def parse_args():
         help="Blank margin at both strip ends for gluing (default: 1.0 cm)",
     )
     p.add_argument(
+        "--blank-front",
+        type=int,
+        default=0,
+        help="Number of blank pages to prepend before manuscript pages.",
+    )
+    p.add_argument(
+        "--blank-back",
+        type=int,
+        default=0,
+        help="Number of blank pages to append after manuscript pages.",
+    )
+    p.add_argument(
         "-m",
         "--no-marks",
         action="store_true",
@@ -131,6 +143,10 @@ def parse_args():
 
     if args.glue_margin_cm < 0:
         p.error("--glue-margin-cm must be >= 0")
+    if args.blank_front < 0:
+        p.error("--blank-front must be >= 0")
+    if args.blank_back < 0:
+        p.error("--blank-back must be >= 0")
 
     return args
 
@@ -280,9 +296,16 @@ def main():
     pages_per_sheet = panels_per_sheet * rows_per_sheet
 
     src = Pdf.open(args.input_file)
-    total_pages = len(src.pages)
+    source_pages = len(src.pages)
+    page_slots = (
+        [None] * args.blank_front
+        + list(range(source_pages))
+        + [None] * args.blank_back
+    )
+    total_pages = len(page_slots)
+
     if total_pages == 0:
-        print("Error: input PDF has no pages.", file=sys.stderr)
+        print("Error: no pages to impose (input is empty and no blank pages requested).", file=sys.stderr)
         sys.exit(2)
 
     num_sheets = math.ceil(total_pages / pages_per_sheet)
@@ -304,7 +327,9 @@ def main():
     print(f"Rows       : {rows_per_sheet} strip row(s) per sheet")
     print(f"Panels     : {panels_per_sheet} per row")
     print(f"Capacity   : {pages_per_sheet} page(s) per sheet")
-    print(f"Input pages: {total_pages}")
+    print(f"Input pages: {source_pages}")
+    print(f"Blanks     : front={args.blank_front}, back={args.blank_back}")
+    print(f"Total pages: {total_pages}")
     print(f"Sheets     : {num_sheets}")
 
     out = Pdf.new()
@@ -312,7 +337,7 @@ def main():
     # Convert source pages once for reuse.
     xobjs = []
     bboxes = []
-    for i in range(total_pages):
+    for i in range(source_pages):
         xobj, bbox = page_to_xobject(out, src, i)
         xobjs.append(xobj)
         bboxes.append(bbox)
@@ -327,7 +352,11 @@ def main():
                 if page_idx >= total_pages:
                     continue
 
-                bbox = bboxes[page_idx]
+                src_idx = page_slots[page_idx]
+                if src_idx is None:
+                    continue
+
+                bbox = bboxes[src_idx]
                 src_w = bbox[2] - bbox[0]
                 src_h = bbox[3] - bbox[1]
                 if src_w <= 0 or src_h <= 0:
@@ -342,7 +371,7 @@ def main():
                 tx = panel_x + (target_page_w - draw_w) / 2.0 - (bbox[0] * scale)
                 ty = strip_y + (target_page_h - draw_h) / 2.0 - (bbox[1] * scale)
 
-                placements.append((xobjs[page_idx], tx, ty, scale, scale))
+                placements.append((xobjs[src_idx], tx, ty, scale, scale))
 
         out.pages.append(make_sheet(out, sheet_w, sheet_h, placements, marks))
 
