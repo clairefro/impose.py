@@ -278,6 +278,8 @@ def fold_crosshair_stream(
     panel_h,
     include_fold_crosshairs,
     fold_crosshair_leg_pt,
+    draw_glue_lines=True,
+    draw_left_cut_line=True,
 ):
     """Return strip cut lines and optional fold crosshairs for each strip row."""
     if not fold_xs:
@@ -296,27 +298,31 @@ def fold_crosshair_stream(
     flap_left_x = max(0.0, strip_x0 - flap_w)
     flap_right_x = min(sheet_w, strip_x1 + flap_w)
 
+
     for strip_y in strip_ys:
         y_bot = strip_y
         y_top = strip_y + strip_h
+
 
         # Solid thin cut guides for the strip boundaries.
         ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_bot:.2f} l S")
         ops.append(f"{strip_x0:.2f} {y_top:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
 
-        # Solid cut line on LEFT side (strip_x0).
-        ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x0:.2f} {y_top:.2f} l S")
+        # Solid cut line on LEFT side (strip_x0), unless suppressed.
+        if draw_left_cut_line:
+            ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x0:.2f} {y_top:.2f} l S")
 
-        # Dotted glue guide on RIGHT side (strip_x1) only.
-        ops.append("[1 1.5] 0 d")
-        ops.append(f"{strip_x1:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
+        if draw_glue_lines:
+            # Dotted glue guide on RIGHT side (strip_x1) only.
+            ops.append("[1 1.5] 0 d")
+            ops.append(f"{strip_x1:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
 
-        # Dotted outer glue-flap boundary on RIGHT side only.
-        if abs(flap_right_x - strip_x1) > 0.01:
-            ops.append(
-                f"{flap_right_x:.2f} {y_bot:.2f} m {flap_right_x:.2f} {y_top:.2f} l S"
-            )
-        ops.append("[] 0 d")
+            # Dotted outer glue-flap boundary on RIGHT side only.
+            if abs(flap_right_x - strip_x1) > 0.01:
+                ops.append(
+                    f"{flap_right_x:.2f} {y_bot:.2f} m {flap_right_x:.2f} {y_top:.2f} l S"
+                )
+            ops.append("[] 0 d")
 
         if include_fold_crosshairs:
             for x in fold_xs:
@@ -492,7 +498,9 @@ def main():
         for row in range(rows_per_sheet)
     ]
     fold_xs = [glue_margin + (i * target_page_w) for i in range(1, panels_per_sheet)]
+    # Precompute marks for front and back (if duplex), else just one.
     marks = None
+    marks_back = None
     if not args.no_marks:
         marks = fold_crosshair_stream(
             sheet_w,
@@ -503,7 +511,22 @@ def main():
             target_page_h,
             include_fold_crosshairs=(not args.no_fold_crosshairs),
             fold_crosshair_leg_pt=args.fold_crosshair_leg_pt,
+            draw_glue_lines=True,
+            draw_left_cut_line=True,
         )
+        if args.duplex:
+            marks_back = fold_crosshair_stream(
+                sheet_w,
+                strip_ys,
+                target_page_h,
+                fold_xs,
+                target_page_w,
+                target_page_h,
+                include_fold_crosshairs=(not args.no_fold_crosshairs),
+                fold_crosshair_leg_pt=args.fold_crosshair_leg_pt,
+                draw_glue_lines=False,
+                draw_left_cut_line=False,
+            )
 
     print("Mode       : accordion strip")
     print(f"Paper size : {sheet_w / MM_TO_PT:.1f} x {sheet_h / MM_TO_PT:.1f} mm (landscape)")
@@ -590,7 +613,7 @@ def main():
                 rotate180=not args.duplex_short,
                 reverse_rows=(not args.duplex_short),
             )
-            out.pages.append(make_sheet(out, sheet_w, sheet_h, back, marks))
+            out.pages.append(make_sheet(out, sheet_w, sheet_h, back, marks_back))
 
     out.save(args.output_file)
     print(f"\nDone -> {args.output_file}")
