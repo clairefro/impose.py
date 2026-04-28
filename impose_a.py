@@ -100,6 +100,11 @@ def _mm_label_from_pt(value_pt):
     return label.replace(".", "p")
 
 
+def _num_label(value):
+    label = f"{value:.2f}".rstrip("0").rstrip(".")
+    return label.replace(".", "p")
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -113,7 +118,10 @@ def parse_args():
         "output_file",
         nargs="?",
         default=None,
-            help="Output PDF (default: <input>_accordion_<w>x<h>mm.pdf)",
+            help=(
+                "Output PDF (default includes all settings, "
+                "e.g. <input>_acc_pap297x210_pg52x74_gl1_xh2_bf1_bb1_dup0_mrk1_fcx1.pdf)"
+            ),
     )
     p.add_argument(
         "--paper-size",
@@ -240,12 +248,18 @@ def fold_crosshair_stream(
     if not fold_xs:
         return None
 
-    m_h = fold_crosshair_leg_pt
-    m_v = fold_crosshair_leg_pt * 0.2
-    ops = ["q", "0.78 0.78 0.78 RG", "0 w"]
+    # Keep guides visible on tiny formats (e.g., A10) by enforcing minimum leg lengths.
+    m_h = max(1.2, fold_crosshair_leg_pt)
+    m_v = max(0.35, m_h * 0.2)
+
+    # Hairline strokes can disappear on some printers/PDF viewers at small scales.
+    ops = ["q", "0.65 0.65 0.65 RG", "0.2 w"]
 
     strip_x0 = min(fold_xs) - panel_w
     strip_x1 = strip_x0 + panel_w * (len(fold_xs) + 1)
+    flap_w = strip_x0
+    flap_left_x = max(0.0, strip_x0 - flap_w)
+    flap_right_x = min(sheet_w, strip_x1 + flap_w)
 
     for strip_y in strip_ys:
         y_bot = strip_y
@@ -254,6 +268,22 @@ def fold_crosshair_stream(
         # Solid thin cut guides for the strip boundaries.
         ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_bot:.2f} l S")
         ops.append(f"{strip_x0:.2f} {y_top:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
+
+        # Dotted glue-margin boundaries at both strip ends.
+        ops.append("[1 1.5] 0 d")
+        ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x0:.2f} {y_top:.2f} l S")
+        ops.append(f"{strip_x1:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
+
+        # Second dotted columns show outer glue-flap boundaries.
+        if abs(flap_left_x - strip_x0) > 0.01:
+            ops.append(
+                f"{flap_left_x:.2f} {y_bot:.2f} m {flap_left_x:.2f} {y_top:.2f} l S"
+            )
+        if abs(flap_right_x - strip_x1) > 0.01:
+            ops.append(
+                f"{flap_right_x:.2f} {y_bot:.2f} m {flap_right_x:.2f} {y_top:.2f} l S"
+            )
+        ops.append("[] 0 d")
 
         if include_fold_crosshairs:
             for x in fold_xs:
@@ -310,11 +340,24 @@ def main():
 
     if args.output_file is None:
         base, _ = os.path.splitext(args.input_file)
-        w_label = _mm_label_from_pt(target_page_w)
-        h_label = _mm_label_from_pt(target_page_h)
-        duplex_suffix = "_duplex" if args.duplex else ""
+        paper_w_mm = _mm_label_from_pt(max(paper_w, paper_h))
+        paper_h_mm = _mm_label_from_pt(min(paper_w, paper_h))
+        page_w_mm = _mm_label_from_pt(target_page_w)
+        page_h_mm = _mm_label_from_pt(target_page_h)
+        glue_cm = _num_label(args.glue_margin_cm)
+        cross_pt = _num_label(args.fold_crosshair_leg_pt)
         args.output_file = (
-            f"{base}_accordion_{w_label}x{h_label}mm{duplex_suffix}.pdf"
+            f"{base}_acc"
+            f"_pap{paper_w_mm}x{paper_h_mm}"
+            f"_pg{page_w_mm}x{page_h_mm}"
+            f"_gl{glue_cm}"
+            f"_xh{cross_pt}"
+            f"_bf{args.blank_front}"
+            f"_bb{args.blank_back}"
+            f"_dup{int(args.duplex)}"
+            f"_mrk{int(not args.no_marks)}"
+            f"_fcx{int(not args.no_fold_crosshairs)}"
+            f".pdf"
         )
 
     # Force landscape so pages run along the paper's long side.

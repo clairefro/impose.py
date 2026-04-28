@@ -209,14 +209,12 @@ python impose_a.py <input.pdf> [output.pdf] [--page-size <size>] [options]
 If `output.pdf` is omitted, the default is:
 
 ```text
-<input>_accordion_<w>x<h>mm.pdf
+<input>_acc_pap<sheetW>x<sheetH>_pg<pageW>x<pageH>_gl<cm>_xh<pt>_bf<n>_bb<n>_dup<0|1>_mrk<0|1>_fcx<0|1>.pdf
 ```
 
-With `--duplex`, the default becomes:
+Abbreviations: `pap`=paper, `pg`=page, `gl`=glue margin, `xh`=crosshair leg, `dup`=duplex, `mrk`=all marks enabled, `fcx`=fold crosshairs enabled.
 
-```text
-<input>_accordion_<w>x<h>mm_duplex.pdf
-```
+Example with defaults: `book_acc_pap297x210_pg52x74_gl1_xh2_bf1_bb1_dup0_mrk1_fcx1.pdf`
 
 ### Defaults
 
