@@ -149,6 +149,14 @@ def parse_args():
         action="store_true",
         help="Hide fold crosshairs but keep strip cut lines.",
     )
+    p.add_argument(
+        "--duplex",
+        action="store_true",
+        help=(
+            "Generate front/back pages for duplex printing. "
+            "Back side is mirrored for long-edge flip."
+        ),
+    )
 
     args = p.parse_args()
 
@@ -287,7 +295,10 @@ def main():
         base, _ = os.path.splitext(args.input_file)
         w_label = _mm_label_from_pt(target_page_w)
         h_label = _mm_label_from_pt(target_page_h)
-        args.output_file = f"{base}_accordion_{w_label}x{h_label}mm.pdf"
+        duplex_suffix = "_duplex" if args.duplex else ""
+        args.output_file = (
+            f"{base}_accordion_{w_label}x{h_label}mm{duplex_suffix}.pdf"
+        )
 
     # Force landscape so pages run along the paper's long side.
     sheet_w = max(paper_w, paper_h)
@@ -324,7 +335,8 @@ def main():
         )
         sys.exit(2)
 
-    pages_per_sheet = panels_per_sheet * rows_per_sheet
+    pages_per_side = panels_per_sheet * rows_per_sheet
+    pages_per_physical_sheet = pages_per_side * (2 if args.duplex else 1)
 
     src = Pdf.open(args.input_file)
     source_pages = len(src.pages)
@@ -339,7 +351,7 @@ def main():
         print("Error: no pages to impose (input is empty and no blank pages requested).", file=sys.stderr)
         sys.exit(2)
 
-    num_sheets = math.ceil(total_pages / pages_per_sheet)
+    num_sheets = math.ceil(total_pages / pages_per_physical_sheet)
 
     y_offset = (sheet_h - (rows_per_sheet * target_page_h)) / 2.0
     strip_ys = [
@@ -364,9 +376,16 @@ def main():
     print(f"Paper size : {sheet_w / MM_TO_PT:.1f} x {sheet_h / MM_TO_PT:.1f} mm (landscape)")
     print(f"Page size  : {target_page_w / MM_TO_PT:.1f} x {target_page_h / MM_TO_PT:.1f} mm")
     print(f"Glue margin: {args.glue_margin_cm:.2f} cm each end")
+    print(f"Duplex     : {'yes' if args.duplex else 'no'}")
     print(f"Rows       : {rows_per_sheet} strip row(s) per sheet")
     print(f"Panels     : {panels_per_sheet} per row")
-    print(f"Capacity   : {pages_per_sheet} page(s) per sheet")
+    if args.duplex:
+        print(
+            f"Capacity   : {pages_per_side} page(s)/side, "
+            f"{pages_per_physical_sheet} page(s)/sheet"
+        )
+    else:
+        print(f"Capacity   : {pages_per_side} page(s) per sheet")
     print(f"Input pages: {source_pages}")
     print(f"Blanks     : front={args.blank_front}, back={args.blank_back}")
     print(f"Total pages: {total_pages}")
@@ -382,13 +401,13 @@ def main():
         xobjs.append(xobj)
         bboxes.append(bbox)
 
-    for sheet_idx in range(num_sheets):
+    def build_side_placements(side_base_idx, mirror_panels):
         placements = []
 
         for row_idx, strip_y in enumerate(strip_ys):
             for panel_idx in range(panels_per_sheet):
                 local_idx = row_idx * panels_per_sheet + panel_idx
-                page_idx = sheet_idx * pages_per_sheet + local_idx
+                page_idx = side_base_idx + local_idx
                 if page_idx >= total_pages:
                     continue
 
@@ -407,17 +426,37 @@ def main():
                 draw_w = src_w * scale
                 draw_h = src_h * scale
 
-                panel_x = glue_margin + (panel_idx * target_page_w)
+                place_panel_idx = (
+                    (panels_per_sheet - 1 - panel_idx) if mirror_panels else panel_idx
+                )
+                panel_x = glue_margin + (place_panel_idx * target_page_w)
                 tx = panel_x + (target_page_w - draw_w) / 2.0 - (bbox[0] * scale)
                 ty = strip_y + (target_page_h - draw_h) / 2.0 - (bbox[1] * scale)
 
                 placements.append((xobjs[src_idx], tx, ty, scale, scale))
 
-        out.pages.append(make_sheet(out, sheet_w, sheet_h, placements, marks))
+        return placements
+
+    for sheet_idx in range(num_sheets):
+        sheet_base = sheet_idx * pages_per_physical_sheet
+
+        front = build_side_placements(sheet_base, mirror_panels=False)
+        out.pages.append(make_sheet(out, sheet_w, sheet_h, front, marks))
+
+        if args.duplex:
+            back_base = sheet_base + pages_per_side
+            back = build_side_placements(back_base, mirror_panels=True)
+            out.pages.append(make_sheet(out, sheet_w, sheet_h, back, marks))
 
     out.save(args.output_file)
     print(f"\nDone -> {args.output_file}")
-    print(f"Output: {len(out.pages)} page(s)")
+    if args.duplex:
+        print(
+            f"Output: {len(out.pages)} page(s) "
+            f"({num_sheets} sheet(s), obverse + reverse)"
+        )
+    else:
+        print(f"Output: {len(out.pages)} page(s)")
 
 
 if __name__ == "__main__":

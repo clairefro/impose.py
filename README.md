@@ -211,6 +211,25 @@ If `output.pdf` is omitted, the default is:
 <input>_accordion_<w>x<h>mm.pdf
 ```
 
+With `--duplex`, the default becomes:
+
+```text
+<input>_accordion_<w>x<h>mm_duplex.pdf
+```
+
+### Defaults
+
+When not specified, `impose_a.py` uses:
+
+- `--paper-size A4`
+- `--glue-margin-cm 1.0`
+- `--fold-crosshair-leg-pt 2.0`
+- `--blank-front 0`
+- `--blank-back 0`
+- `--duplex` disabled (single-sided output)
+- `--no-fold-crosshairs` disabled (fold crosshairs are shown)
+- `--no-marks` disabled (strip cut lines and fold crosshairs are shown)
+
 ### Key options
 
 | Option                    | Description                                                                                                   |
@@ -220,6 +239,7 @@ If `output.pdf` is omitted, the default is:
 | `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                               |
 | `--blank-front`           | Add blank pages before manuscript pages                                                                       |
 | `--blank-back`            | Add blank pages after manuscript pages                                                                        |
+| `--duplex`                | Output front+back pages for duplex printing (back side mirrored for long-edge flip)                           |
 | `--no-fold-crosshairs`    | Hide fold crosshairs but keep strip cut lines                                                                 |
 | `--fold-crosshair-leg-pt` | Fold crosshair horizontal leg length in points (default: `2.0`)                                               |
 | `-m`, `--no-marks`        | Hide all marks (cut lines + fold crosshairs)                                                                  |
@@ -232,6 +252,9 @@ python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm
 
 # Letter paper with front/back blanks and default glue margin
 python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --blank-front 2 --blank-back 2
+
+# Duplex output: first half on front, second half on back (long-edge mirrored)
+python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --duplex
 
 # Keep strip cut lines, but hide fold crosshairs
 python impose_a.py manuscript.pdf --paper-size Letter --page-size 52x74mm --no-fold-crosshairs
