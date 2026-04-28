@@ -121,6 +121,12 @@ def parse_args():
         help="Blank margin at both strip ends for gluing (default: 1.0 cm)",
     )
     p.add_argument(
+        "--fold-crosshair-leg-pt",
+        type=float,
+        default=2.0,
+        help="Fold crosshair horizontal leg length in points (default: 2.0).",
+    )
+    p.add_argument(
         "--blank-front",
         type=int,
         default=0,
@@ -136,13 +142,20 @@ def parse_args():
         "-m",
         "--no-marks",
         action="store_true",
-        help="Hide faint fold-line crosshair marks.",
+        help="Hide all marks (both strip cut lines and fold crosshairs).",
+    )
+    p.add_argument(
+        "--no-fold-crosshairs",
+        action="store_true",
+        help="Hide fold crosshairs but keep strip cut lines.",
     )
 
     args = p.parse_args()
 
     if args.glue_margin_cm < 0:
         p.error("--glue-margin-cm must be >= 0")
+    if args.fold_crosshair_leg_pt <= 0:
+        p.error("--fold-crosshair-leg-pt must be > 0")
     if args.blank_front < 0:
         p.error("--blank-front must be >= 0")
     if args.blank_back < 0:
@@ -188,24 +201,42 @@ def page_to_xobject(out_pdf, src_pdf, page_idx):
     return xobj, bbox
 
 
-def fold_crosshair_stream(sheet_w, strip_ys, strip_h, fold_xs, panel_w, panel_h):
-    """Return faint crosshairs at each fold line for each strip row."""
+def fold_crosshair_stream(
+    sheet_w,
+    strip_ys,
+    strip_h,
+    fold_xs,
+    panel_w,
+    panel_h,
+    include_fold_crosshairs,
+    fold_crosshair_leg_pt,
+):
+    """Return strip cut lines and optional fold crosshairs for each strip row."""
     if not fold_xs:
         return None
 
-    m = min(panel_w, panel_h) * 0.06
-    ops = ["q", "0.78 0.78 0.78 RG", "0.2 w"]
+    m_h = fold_crosshair_leg_pt
+    m_v = fold_crosshair_leg_pt * 0.2
+    ops = ["q", "0.78 0.78 0.78 RG", "0 w"]
+
+    strip_x0 = min(fold_xs) - panel_w
+    strip_x1 = strip_x0 + panel_w * (len(fold_xs) + 1)
 
     for strip_y in strip_ys:
         y_bot = strip_y
         y_top = strip_y + strip_h
 
-        for x in fold_xs:
-            ops.append(f"{x:.2f} {y_bot - m:.2f} m {x:.2f} {y_bot + m:.2f} l S")
-            ops.append(f"{x - m:.2f} {y_bot:.2f} m {x + m:.2f} {y_bot:.2f} l S")
+        # Solid thin cut guides for the strip boundaries.
+        ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_bot:.2f} l S")
+        ops.append(f"{strip_x0:.2f} {y_top:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
 
-            ops.append(f"{x:.2f} {y_top - m:.2f} m {x:.2f} {y_top + m:.2f} l S")
-            ops.append(f"{x - m:.2f} {y_top:.2f} m {x + m:.2f} {y_top:.2f} l S")
+        if include_fold_crosshairs:
+            for x in fold_xs:
+                ops.append(f"{x:.2f} {y_bot - m_v:.2f} m {x:.2f} {y_bot + m_v:.2f} l S")
+                ops.append(f"{x - m_h:.2f} {y_bot:.2f} m {x + m_h:.2f} {y_bot:.2f} l S")
+
+                ops.append(f"{x:.2f} {y_top - m_v:.2f} m {x:.2f} {y_top + m_v:.2f} l S")
+                ops.append(f"{x - m_h:.2f} {y_top:.2f} m {x + m_h:.2f} {y_top:.2f} l S")
 
     ops.append("Q")
     return "\n".join(ops).encode()
@@ -316,9 +347,18 @@ def main():
         for row in range(rows_per_sheet)
     ]
     fold_xs = [glue_margin + (i * target_page_w) for i in range(1, panels_per_sheet)]
-    marks = None if args.no_marks else fold_crosshair_stream(
-        sheet_w, strip_ys, target_page_h, fold_xs, target_page_w, target_page_h
-    )
+    marks = None
+    if not args.no_marks:
+        marks = fold_crosshair_stream(
+            sheet_w,
+            strip_ys,
+            target_page_h,
+            fold_xs,
+            target_page_w,
+            target_page_h,
+            include_fold_crosshairs=(not args.no_fold_crosshairs),
+            fold_crosshair_leg_pt=args.fold_crosshair_leg_pt,
+        )
 
     print("Mode       : accordion strip")
     print(f"Paper size : {sheet_w / MM_TO_PT:.1f} x {sheet_h / MM_TO_PT:.1f} mm (landscape)")
