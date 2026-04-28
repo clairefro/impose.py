@@ -126,14 +126,15 @@ pip install -r requirements.txt
 > **Tip:** Always activate the venv before running the script. If you see `ModuleNotFoundError: No module named 'pikepdf'`, you likely forgot to activate it:
 >
 > ```bash
-> source .venv/bin/activate
+> python impose_a.py <input.pdf> [output.pdf] [--page-size <size>] [options]
 > ```
 
 ## Usage
 
-```bash
+| `--page-size` | Accordion panel size. Named sizes: `A3`, `A4`, `A5`, `A6`, `A7`, `A8`, `A9`, `A10`; or custom `WxH` with unit (`mm/cm/in/pt`). Default: `A8` |
 python impose.py <input.pdf> [output.pdf] [options]
-```
+
+````
 
 ### Arguments
 
@@ -173,7 +174,7 @@ python impose.py manuscript.pdf -f 4 -m
 
 # Custom output filename
 python impose.py manuscript.pdf my_output.pdf -f 4
-```
+````
 
 ### Printing
 
@@ -202,7 +203,7 @@ Use `impose_a.py` to impose manuscript pages as accordion-fold strips laid out a
 ### Basic usage
 
 ```bash
-python impose_a.py <input.pdf> [output.pdf] --page-size <WxHunit> [options]
+python impose_a.py <input.pdf> [output.pdf] [--page-size <size>] [options]
 ```
 
 If `output.pdf` is omitted, the default is:
@@ -222,6 +223,7 @@ With `--duplex`, the default becomes:
 When not specified, `impose_a.py` uses:
 
 - `--paper-size A4`
+- `--page-size A8`
 - `--glue-margin-cm 1.0`
 - `--fold-crosshair-leg-pt 2.0`
 - `--blank-front 0`
@@ -235,7 +237,7 @@ When not specified, `impose_a.py` uses:
 | Option                    | Description                                                                                                   |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `--paper-size`            | Printer paper size (`A5`, `A4`, `A3`, `Letter`, `Legal`, `Tabloid`) or custom `WxH` with unit (`mm/cm/in/pt`) |
-| `--page-size`             | Required accordion panel size, e.g. `52x74mm`                                                                 |
+| `--page-size`             | Accordion panel size. Named sizes: `A3`, `A4`, `A5`, `A6`, `A7`, `A8`, `A9`, `A10`; or custom `WxH` with unit (`mm/cm/in/pt`). Default: `A8` |
 | `--glue-margin-cm`        | Glue margin at both strip ends (default: `1.0`)                                                               |
 | `--blank-front`           | Add blank pages before manuscript pages                                                                       |
 | `--blank-back`            | Add blank pages after manuscript pages                                                                        |

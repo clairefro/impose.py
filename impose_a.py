@@ -30,6 +30,17 @@ PAPER_PRESETS_MM = {
     "TABLOID": (279.4, 431.8),
 }
 
+PAGE_PRESETS_MM = {
+    "A3": (297.0, 420.0),
+    "A4": (210.0, 297.0),
+    "A5": (148.0, 210.0),
+    "A6": (105.0, 148.0),
+    "A7": (74.0, 105.0),
+    "A8": (52.0, 74.0),
+    "A9": (37.0, 52.0),
+    "A10": (26.0, 37.0),
+}
+
 
 # ---------------------------------------------------------------------------
 # Parsing helpers
@@ -77,6 +88,9 @@ def parse_paper_size(spec):
 
 
 def parse_page_size(spec):
+    key = spec.strip().upper()
+    if key in PAGE_PRESETS_MM:
+        return _mm_pair_to_pt(PAGE_PRESETS_MM[key])
     return _parse_wh_spec(spec, default_unit="mm")
 
 
@@ -111,8 +125,11 @@ def parse_args():
     )
     p.add_argument(
         "--page-size",
-        required=True,
-        help="Target accordion page size WxH with unit (mm/cm/in/pt), e.g. 105x148mm",
+        default="A8",
+        help=(
+            "Target accordion page size. Named sizes: A3, A4, A5, A6, A7, A8, A9, A10; "
+            "or custom WxH with unit (mm/cm/in/pt), e.g. 105x148mm (default: A8)"
+        ),
     )
     p.add_argument(
         "--glue-margin-cm",
