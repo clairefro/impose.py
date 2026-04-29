@@ -272,4 +272,9 @@ python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --fold-cro
 
 # Hide all marks entirely
 python impose_a.py manuscript.pdf --paper-size A4 --page-size 52x74mm --no-marks
+
+### Folding tips:
+
+- Ensure your strips fold such that the fold aligns with the grain of your paper.
+- Check every 3–4 folds to ensure drift is not occurring.
 ```

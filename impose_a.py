@@ -299,10 +299,10 @@ def fold_crosshair_stream(
     flap_right_x = min(sheet_w, strip_x1 + flap_w)
 
 
+
     for strip_y in strip_ys:
         y_bot = strip_y
         y_top = strip_y + strip_h
-
 
         # Solid thin cut guides for the strip boundaries.
         ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_bot:.2f} l S")
@@ -312,19 +312,22 @@ def fold_crosshair_stream(
         if draw_left_cut_line:
             ops.append(f"{strip_x0:.2f} {y_bot:.2f} m {strip_x0:.2f} {y_top:.2f} l S")
 
-        if draw_glue_lines:
-            # Dotted glue guide on RIGHT side (strip_x1) only.
-            ops.append("[1 1.5] 0 d")
-            ops.append(f"{strip_x1:.2f} {y_bot:.2f} m {strip_x1:.2f} {y_top:.2f} l S")
+    # Draw glue margin crosshairs (above and below the topmost and bottommost cut lines)
+    if draw_glue_lines:
+        # Above the topmost cut line
+        glue_x = strip_x0  # left glue margin
+        glue_x_r = strip_x1 + (flap_right_x - strip_x1)  # right glue margin (outer edge)
+        crosshair_len = max(2.0, m_h)
+        # Above top
+        ops.append(f"{glue_x_r:.2f} {strip_ys[0] + strip_h + crosshair_len:.2f} m {glue_x_r:.2f} {strip_ys[0] + strip_h:.2f} l S")
+        # Below bottom
+        ops.append(f"{glue_x_r:.2f} {strip_ys[-1] - crosshair_len:.2f} m {glue_x_r:.2f} {strip_ys[-1]:.2f} l S")
 
-            # Dotted outer glue-flap boundary on RIGHT side only.
-            if abs(flap_right_x - strip_x1) > 0.01:
-                ops.append(
-                    f"{flap_right_x:.2f} {y_bot:.2f} m {flap_right_x:.2f} {y_top:.2f} l S"
-                )
-            ops.append("[] 0 d")
-
-        if include_fold_crosshairs:
+    # Draw fold crosshairs as before
+    if include_fold_crosshairs:
+        for strip_y in strip_ys:
+            y_bot = strip_y
+            y_top = strip_y + strip_h
             for x in fold_xs:
                 # Vertical segments only; horizontal line comes from intersection with cut lines.
                 ops.append(f"{x:.2f} {y_bot - m_v:.2f} m {x:.2f} {y_bot + m_v:.2f} l S")
@@ -368,11 +371,18 @@ def make_sheet(out_pdf, sheet_w, sheet_h, placements, marks_bytes):
     if marks_bytes:
         content += b"\n" + marks_bytes
 
+    # Ensure font resource for glue label
+    resources = Dictionary({"/XObject": xobj_dict})
+    # Add Helvetica font as /F1 if glue label is present
+    if b"/F1" in content:
+        font_dict = Dictionary({"/F1": Dictionary({"/Type": Name.Font, "/Subtype": Name.Type1, "/BaseFont": Name.Helvetica})})
+        resources[Name("/Font")] = font_dict
+
     page_dict = Dictionary(
         {
             "/Type": Name.Page,
             "/MediaBox": Array([0, 0, Decimal(str(sheet_w)), Decimal(str(sheet_h))]),
-            "/Resources": Dictionary({"/XObject": xobj_dict}),
+            "/Resources": resources,
             "/Contents": Stream(out_pdf, content),
         }
     )
@@ -601,12 +611,11 @@ def main():
         return placements
 
     for sheet_idx in range(num_sheets):
-        front = build_side_placements(front_slots, sheet_idx, rotate180=False)
-        out.pages.append(make_sheet(out, sheet_w, sheet_h, front, marks))
-
+        # In duplex mode, only put glue guides on front (odd) sheets
         if args.duplex:
-            # Long-edge: 180° rotation compensates for sheet flipping top-to-bottom.
-            # Short-edge: horizontal mirror only compensates for left-right flip.
+            front = build_side_placements(front_slots, sheet_idx, rotate180=False)
+            out.pages.append(make_sheet(out, sheet_w, sheet_h, front, marks))
+
             back = build_side_placements(
                 back_slots,
                 sheet_idx,
@@ -614,6 +623,10 @@ def main():
                 reverse_rows=(not args.duplex_short),
             )
             out.pages.append(make_sheet(out, sheet_w, sheet_h, back, marks_back))
+        else:
+            # Single-sided: always show glue guides
+            front = build_side_placements(front_slots, sheet_idx, rotate180=False)
+            out.pages.append(make_sheet(out, sheet_w, sheet_h, front, marks))
 
     out.save(args.output_file)
     print(f"\nDone -> {args.output_file}")
