@@ -1,6 +1,6 @@
 # impose.py for katte press
 
-PDF imposition tool for **cut-and-stack bookbinding** (sextodecimo / 16mo).
+PDF imposition tool for **cut-and-stack** and **accordion** bookbinding (sextodecimo / 16mo).
 
 Takes a manuscript PDF (one page per book page) and produces an imposed PDF with multiple book pages arranged on each sheet. Print duplex, cut, and stack to form signatures ready for binding.
 
